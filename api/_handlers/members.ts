@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { prisma } from "../_lib/prisma";
-import { readBody, sendJson, type ApiRequest, type ApiResponse, type AuthContext } from "../_lib/http";
+import { prisma } from "../_lib/prisma.js";
+import { readBody, sendJson, type ApiRequest, type ApiResponse, type AuthContext } from "../_lib/http.js";
 
 const memberSchema = z.object({
   name: z.string().min(1),

@@ -1,14 +1,14 @@
-import { requireAuth } from "./_lib/auth";
-import { getPath, sendError, sendJson, splitPath, type ApiRequest, type ApiResponse } from "./_lib/http";
-import { login, me } from "./_handlers/auth";
-import { ensureDefaultTeam } from "./_handlers/bootstrap";
-import { passwordMatches } from "./_lib/password";
-import { readBody } from "./_lib/http";
-import { projects } from "./_handlers/projects";
-import { members } from "./_handlers/members";
-import { contentItems } from "./_handlers/contentItems";
-import { tasks } from "./_handlers/tasks";
-import { confirmImport } from "./_handlers/importPlan";
+import { requireAuth } from "./_lib/auth.js";
+import { getPath, sendError, sendJson, splitPath, type ApiRequest, type ApiResponse } from "./_lib/http.js";
+import { me } from "./_handlers/auth.js";
+import { ensureDefaultTeam } from "./_handlers/bootstrap.js";
+import { passwordMatches } from "./_lib/password.js";
+import { readBody } from "./_lib/http.js";
+import { projects } from "./_handlers/projects.js";
+import { members } from "./_handlers/members.js";
+import { contentItems } from "./_handlers/contentItems.js";
+import { tasks } from "./_handlers/tasks.js";
+import { confirmImport } from "./_handlers/importPlan.js";
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   res.setHeader?.("Access-Control-Allow-Origin", "*");
@@ -21,16 +21,31 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   try {
-    const path = getPath(req);
-    const [root, id] = splitPath(path);
+    const pathname = getPath(req);
+    const [root, id] = splitPath(pathname);
 
     if (root === "health") {
       sendJson(res, 200, { ok: true, time: new Date().toISOString() });
       return;
     }
 
-    if (root === "auth" && id === "login" && req.method === "POST") {
-      await login(req, res);
+    if (root === "debug-env" && req.method === "GET") {
+      sendJson(res, 200, {
+        ok: true,
+        env: {
+          hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
+          hasDirectUrl: Boolean(process.env.DIRECT_URL),
+          hasTeamPassword: Boolean(process.env.TEAM_PASSWORD || process.env.TEAM_PASSWORD_HASH),
+          hasJwtSecret: Boolean(process.env.JWT_SECRET),
+          nodeEnv: process.env.NODE_ENV ?? "unknown",
+        },
+      });
+      return;
+    }
+
+    if (pathname === "/auth/login" && req.method === "POST") {
+      const { handleLogin } = await import("./_handlers/auth.js");
+      await handleLogin(req, res);
       return;
     }
 

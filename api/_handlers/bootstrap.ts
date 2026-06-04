@@ -1,4 +1,4 @@
-import { prisma } from "../_lib/prisma";
+import { prisma } from "../_lib/prisma.js";
 
 export async function ensureDefaultTeam() {
   const existing = await prisma.team.findFirst({

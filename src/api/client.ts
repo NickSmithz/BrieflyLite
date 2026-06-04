@@ -37,6 +37,23 @@ function query(params?: Record<string, string | undefined>) {
   return value ? `?${value}` : "";
 }
 
+async function readResponseBody(response: Response) {
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+
+  if (!text) return null;
+
+  if (contentType.includes("application/json")) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { raw: text };
+    }
+  }
+
+  return { raw: text };
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const response = await fetch(`/api${path}`, {
@@ -48,11 +65,16 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     },
   });
 
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  const data = await readResponseBody(response);
 
   if (!response.ok) {
-    throw new Error(data?.error || "Не удалось выполнить запрос");
+    const message =
+      data?.error ||
+      data?.message ||
+      data?.raw ||
+      `Backend request failed with ${response.status}`;
+
+    throw new Error(message);
   }
 
   return data as T;
@@ -79,8 +101,9 @@ export const getContentItems = (params?: { projectId?: string; status?: string; 
   apiFetch<ContentItem[]>(`/content-items${query(params)}`);
 export const createContentItem = (input: Partial<ContentItem> & { projectId: string; title: string; format: string }) =>
   apiFetch<ContentItem>("/content-items", { method: "POST", body: JSON.stringify(input) });
-export const createContentItemsBulk = (items: Array<Partial<ContentItem> & { projectId: string; title: string; format: string }>) =>
-  apiFetch<ContentItem[]>("/content-items/bulk", { method: "POST", body: JSON.stringify({ items }) });
+export const createContentItemsBulk = (
+  items: Array<Partial<ContentItem> & { projectId: string; title: string; format: string }>,
+) => apiFetch<ContentItem[]>("/content-items/bulk", { method: "POST", body: JSON.stringify({ items }) });
 export const updateContentItem = (id: string, input: Partial<ContentItem>) =>
   apiFetch<ContentItem>(`/content-items/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 export const deleteContentItem = (id: string) =>

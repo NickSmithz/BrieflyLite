@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
-import { prisma } from "./prisma";
-import type { ApiRequest, AuthContext } from "./http";
+import { prisma } from "./prisma.js";
+import type { ApiRequest, AuthContext } from "./http.js";
 
 const secret = () => process.env.JWT_SECRET || "change-me";
 

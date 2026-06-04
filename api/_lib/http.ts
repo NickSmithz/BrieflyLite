@@ -51,11 +51,17 @@ export async function readBody<T = unknown>(req: ApiRequest): Promise<T> {
 
 export function getPath(req: ApiRequest): string {
   const rawPath = req.query?.path;
-  if (Array.isArray(rawPath)) return `/${rawPath.join("/")}`;
-  if (rawPath) return `/${rawPath}`;
-
   const url = new URL(req.url ?? "/", "http://localhost");
-  return url.pathname.replace(/^\/api/, "") || "/";
+  const queryPath = Array.isArray(rawPath) ? rawPath.join("/") : rawPath ?? url.searchParams.get("path");
+  if (queryPath) return normalizePath(queryPath);
+
+  return normalizePath(url.pathname);
+}
+
+function normalizePath(path: string) {
+  const withoutApi = path.replace(/^\/?api(?:\/index)?/, "");
+  const normalized = withoutApi.startsWith("/") ? withoutApi : `/${withoutApi}`;
+  return normalized.replace(/\/+/g, "/") || "/";
 }
 
 export function getSearch(req: ApiRequest) {

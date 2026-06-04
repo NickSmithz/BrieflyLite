@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { prisma } from "../_lib/prisma";
-import { normalizeDate, readBody, sendJson, type ApiRequest, type ApiResponse, type AuthContext } from "../_lib/http";
+import { prisma } from "../_lib/prisma.js";
+import { normalizeDate, readBody, sendJson, type ApiRequest, type ApiResponse, type AuthContext } from "../_lib/http.js";
 
 const itemSchema = z.object({
   projectId: z.string().min(1),
