@@ -1,8 +1,20 @@
 import { create } from "zustand";
 import * as api from "../api/client";
-import type { ContentItem, ImportDraftItem, Member, Project, Tab, Task, Team } from "../types";
+import type {
+  ContentItem,
+  ImportDraftItem,
+  ImportPreviewItem,
+  ImportPreviewTask,
+  Member,
+  Project,
+  Tab,
+  Task,
+  Team,
+} from "../types";
 import { parseImportText as parseText } from "../utils/importParser";
 import { generateTasksForImport } from "../utils/taskGenerator";
+
+type ImportStep = "text" | "items" | "tasks";
 
 type CrewState = {
   token: string | null;
@@ -17,6 +29,11 @@ type CrewState = {
   isLoading: boolean;
   error: string | null;
   successMessage: string | null;
+  importStep: ImportStep;
+  importRawText: string;
+  importProjectId: string | null;
+  importPreviewItems: ImportPreviewItem[];
+  importPreviewTasks: ImportPreviewTask[];
   login: (password: string, memberId?: string) => Promise<api.LoginResponse>;
   logout: () => void;
   loadWorkspace: () => Promise<void>;
@@ -30,8 +47,18 @@ type CrewState = {
   updateTask: (id: string, input: Partial<Task>) => Promise<void>;
   updateTaskStatus: (id: string, status: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
-  parseImportText: (rawText: string) => ImportDraftItem[];
-  confirmImport: (projectId: string, rawText: string, items: ImportDraftItem[]) => Promise<void>;
+  setImportProject: (projectId: string | null) => void;
+  setImportRawText: (text: string) => void;
+  parseImportText: () => void;
+  updateImportPreviewItem: (clientId: string, patch: Partial<ImportPreviewItem>) => void;
+  deleteImportPreviewItem: (clientId: string) => void;
+  addImportPreviewItem: (item: Partial<ImportPreviewItem>) => void;
+  updateImportPreviewTask: (clientId: string, patch: Partial<ImportPreviewTask>) => void;
+  deleteImportPreviewTask: (clientId: string) => void;
+  addImportPreviewTask: (task: Partial<ImportPreviewTask>) => void;
+  goToImportStep: (step: ImportStep) => void;
+  confirmImport: () => Promise<void>;
+  resetImport: () => void;
   setActiveTab: (tab: Tab) => void;
   setSelectedProject: (projectId: string | null) => void;
   clearMessages: () => void;
@@ -50,6 +77,26 @@ async function run<T>(set: (state: Partial<CrewState>) => void, fn: () => Promis
   }
 }
 
+function createClientId(prefix: string) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function toPreviewItems(items: ImportDraftItem[]): ImportPreviewItem[] {
+  return items.map((item) => ({
+    ...item,
+    clientId: createClientId("item"),
+    format: item.format || "post",
+  }));
+}
+
+const emptyImportState = {
+  importStep: "text" as ImportStep,
+  importRawText: "",
+  importProjectId: null,
+  importPreviewItems: [],
+  importPreviewTasks: [],
+};
+
 export const useCrewStore = create<CrewState>((set, get) => ({
   token: api.getToken(),
   team: null,
@@ -63,6 +110,7 @@ export const useCrewStore = create<CrewState>((set, get) => ({
   isLoading: false,
   error: null,
   successMessage: null,
+  ...emptyImportState,
 
   async login(password, memberId) {
     return run(set, async () => {
@@ -96,6 +144,7 @@ export const useCrewStore = create<CrewState>((set, get) => ({
       tasks: [],
       activeTab: "home",
       selectedProjectId: null,
+      ...emptyImportState,
     });
   },
 
@@ -185,27 +234,122 @@ export const useCrewStore = create<CrewState>((set, get) => ({
     });
   },
 
-  parseImportText(rawText) {
-    return parseText(rawText);
+  setImportProject(projectId) {
+    set({ importProjectId: projectId, error: null });
   },
 
-  async confirmImport(projectId, rawText, items) {
+  setImportRawText(text) {
+    set({ importRawText: text, error: null });
+  },
+
+  parseImportText() {
+    const { importProjectId, importRawText, members } = get();
+
+    if (!importProjectId) {
+      set({ error: "Выберите проект для импорта" });
+      return;
+    }
+
+    if (!importRawText.trim()) {
+      set({ error: "Вставьте контент-план для разбора" });
+      return;
+    }
+
+    const importPreviewItems = toPreviewItems(parseText(importRawText));
+    const importPreviewTasks = generateTasksForImport(importPreviewItems, members);
+    set({ importPreviewItems, importPreviewTasks, importStep: "items", error: null, successMessage: null });
+  },
+
+  updateImportPreviewItem(clientId, patch) {
+    set({
+      importPreviewItems: get().importPreviewItems.map((item) =>
+        item.clientId === clientId ? { ...item, ...patch } : item,
+      ),
+    });
+  },
+
+  deleteImportPreviewItem(clientId) {
+    set({
+      importPreviewItems: get().importPreviewItems.filter((item) => item.clientId !== clientId),
+      importPreviewTasks: get().importPreviewTasks.filter((task) => task.contentItemClientId !== clientId),
+    });
+  },
+
+  addImportPreviewItem(item) {
+    const previewItem: ImportPreviewItem = {
+      clientId: createClientId("item"),
+      title: item.title || "Новая публикация",
+      format: item.format || "post",
+      publishDate: item.publishDate ?? null,
+      topic: item.topic ?? null,
+      notes: item.notes ?? null,
+      referenceUrl: item.referenceUrl ?? null,
+      status: item.status || "idea",
+    };
+    set({ importPreviewItems: [...get().importPreviewItems, previewItem] });
+  },
+
+  updateImportPreviewTask(clientId, patch) {
+    set({
+      importPreviewTasks: get().importPreviewTasks.map((task) =>
+        task.clientId === clientId ? { ...task, ...patch } : task,
+      ),
+    });
+  },
+
+  deleteImportPreviewTask(clientId) {
+    set({ importPreviewTasks: get().importPreviewTasks.filter((task) => task.clientId !== clientId) });
+  },
+
+  addImportPreviewTask(task) {
+    const previewTask: ImportPreviewTask = {
+      clientId: createClientId("task"),
+      contentItemClientId: task.contentItemClientId ?? null,
+      title: task.title || "Новая задача",
+      description: task.description ?? null,
+      assigneeId: task.assigneeId ?? null,
+      dueDate: task.dueDate ?? null,
+      status: task.status || "new",
+      priority: task.priority || "normal",
+    };
+    set({ importPreviewTasks: [...get().importPreviewTasks, previewTask] });
+  },
+
+  goToImportStep(step) {
+    set({ importStep: step, error: null });
+  },
+
+  async confirmImport() {
     return run(set, async () => {
-      if (!projectId) {
+      const { importProjectId, importRawText, importPreviewItems, importPreviewTasks } = get();
+
+      if (!importProjectId) {
         throw new Error("Выберите проект для импорта");
       }
 
-      const normalizedItems = Array.isArray(items) ? items : [];
-      const tasks = generateTasksForImport(projectId, normalizedItems, get().members);
-      const normalizedTasks = Array.isArray(tasks) ? tasks : [];
-      const result = await api.confirmImport({ projectId, rawText, items: normalizedItems, tasks: normalizedTasks });
+      if (!importPreviewItems.length && !importPreviewTasks.length) {
+        throw new Error("Добавьте хотя бы одну публикацию или задачу");
+      }
+
+      const result = await api.confirmImport({
+        projectId: importProjectId,
+        rawText: importRawText,
+        items: importPreviewItems,
+        tasks: importPreviewTasks,
+      });
+
       set({
         contentItems: [...result.contentItems, ...get().contentItems],
         tasks: [...result.tasks, ...get().tasks],
         successMessage: `Создано: ${result.contentItems.length} публикаций и ${result.tasks.length} задач`,
         activeTab: "plan",
+        ...emptyImportState,
       });
     });
+  },
+
+  resetImport() {
+    set({ ...emptyImportState, error: null, successMessage: null });
   },
 
   setActiveTab(tab) {

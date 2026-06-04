@@ -1,5 +1,9 @@
-import type { ImportDraftItem, ImportDraftTask, Member } from "../types";
+import type { ImportPreviewItem, ImportPreviewTask, Member } from "../types";
 import { addDays } from "./date";
+
+function createClientId(prefix: string) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function roleMember(members: Member[], words: string[]) {
   return members.find((member) => {
@@ -27,7 +31,14 @@ function pickAssignee(title: string, members: Member[]) {
 function titlesForFormat(format: string) {
   const lower = format.toLowerCase();
   if (lower.includes("reels") || lower.includes("рилс")) {
-    return ["Написать сценарий", "Подготовить референс", "Снять видео", "Смонтировать reels", "Проверить", "Опубликовать"];
+    return [
+      "Написать сценарий",
+      "Подготовить референс",
+      "Снять видео",
+      "Смонтировать reels",
+      "Проверить",
+      "Опубликовать",
+    ];
   }
   if (lower.includes("stories") || lower.includes("сторис")) {
     return ["Подготовить stories", "Проверить", "Опубликовать"];
@@ -39,7 +50,12 @@ function dueDateFor(title: string, publishDate?: string | null) {
   if (!publishDate) return null;
   const lower = title.toLowerCase();
   if (lower.includes("сценар") || lower.includes("текст")) return addDays(publishDate, -3);
-  if (lower.includes("дизайн") || lower.includes("снять") || lower.includes("смонтировать") || lower.includes("stories")) {
+  if (
+    lower.includes("дизайн") ||
+    lower.includes("снять") ||
+    lower.includes("смонтировать") ||
+    lower.includes("stories")
+  ) {
     return addDays(publishDate, -2);
   }
   if (lower.includes("провер")) return addDays(publishDate, -1);
@@ -47,11 +63,12 @@ function dueDateFor(title: string, publishDate?: string | null) {
   return null;
 }
 
-export function generateTasksForImport(projectId: string, items: ImportDraftItem[], members: Member[]): ImportDraftTask[] {
-  return items.flatMap((item, contentItemIndex) =>
+export function generateTasksForImport(items: ImportPreviewItem[], members: Member[]): ImportPreviewTask[] {
+  return items.flatMap((item, contentItemClientIndex) =>
     titlesForFormat(item.format).map((title) => ({
-      projectId,
-      contentItemIndex,
+      clientId: createClientId("task"),
+      contentItemClientId: item.clientId,
+      contentItemClientIndex,
       title: `${title}: ${item.title}`,
       description: item.notes || item.referenceUrl || null,
       assigneeId: pickAssignee(title, members),

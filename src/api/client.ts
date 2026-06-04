@@ -1,4 +1,4 @@
-import type { ContentItem, ImportDraftItem, ImportDraftTask, Member, Project, Task, Team } from "../types";
+import type { ContentItem, ImportPreviewItem, ImportPreviewTask, Member, Project, Task, Team } from "../types";
 
 const TOKEN_KEY = "briefly-crew-token";
 const MEMBER_KEY = "briefly-crew-member-id";
@@ -132,8 +132,8 @@ export const deleteTask = (id: string) => apiFetch<{ ok: true }>(`/tasks/${id}`,
 export const confirmImport = (input: {
   projectId: string;
   rawText: string;
-  items: ImportDraftItem[];
-  tasks: ImportDraftTask[];
+  items: ImportPreviewItem[];
+  tasks: ImportPreviewTask[];
 }) => apiFetch<{ contentItems: ContentItem[]; tasks: Task[] }>("/import/confirm", {
   method: "POST",
   body: JSON.stringify(input),

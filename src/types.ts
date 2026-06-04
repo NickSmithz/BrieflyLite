@@ -73,9 +73,25 @@ export type ImportDraftItem = {
   status?: string;
 };
 
+export type ImportPreviewItem = ImportDraftItem & {
+  clientId: string;
+};
+
 export type ImportDraftTask = {
   contentItemIndex: number;
   projectId?: string;
+  title: string;
+  description?: string | null;
+  assigneeId?: string | null;
+  dueDate?: string | null;
+  status?: string;
+  priority?: string;
+};
+
+export type ImportPreviewTask = {
+  clientId: string;
+  contentItemClientId?: string | null;
+  contentItemClientIndex?: number;
   title: string;
   description?: string | null;
   assigneeId?: string | null;
