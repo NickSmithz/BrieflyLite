@@ -7,6 +7,12 @@ export type LoginResponse =
   | { requiresMemberSelection: true; team: Team; members: Member[] }
   | { token: string; team: Team; member: Member; members: Member[] };
 
+export type ApiError = Error & {
+  code?: string;
+  details?: unknown;
+  status?: number;
+};
+
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -74,7 +80,11 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       data?.raw ||
       `Backend request failed with ${response.status}`;
 
-    throw new Error(message);
+    const error = new Error(message) as ApiError;
+    error.code = data?.code;
+    error.details = data?.details;
+    error.status = response.status;
+    throw error;
   }
 
   return data as T;

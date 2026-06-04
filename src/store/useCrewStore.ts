@@ -191,8 +191,14 @@ export const useCrewStore = create<CrewState>((set, get) => ({
 
   async confirmImport(projectId, rawText, items) {
     return run(set, async () => {
-      const tasks = generateTasksForImport(projectId, items, get().members);
-      const result = await api.confirmImport({ projectId, rawText, items, tasks });
+      if (!projectId) {
+        throw new Error("Выберите проект для импорта");
+      }
+
+      const normalizedItems = Array.isArray(items) ? items : [];
+      const tasks = generateTasksForImport(projectId, normalizedItems, get().members);
+      const normalizedTasks = Array.isArray(tasks) ? tasks : [];
+      const result = await api.confirmImport({ projectId, rawText, items: normalizedItems, tasks: normalizedTasks });
       set({
         contentItems: [...result.contentItems, ...get().contentItems],
         tasks: [...result.tasks, ...get().tasks],

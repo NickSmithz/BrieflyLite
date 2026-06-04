@@ -4,6 +4,7 @@ import { Card } from "../components/Card";
 import { EmptyState } from "../components/EmptyState";
 import { Input } from "../components/Input";
 import { Textarea } from "../components/Textarea";
+import type { ApiError } from "../api/client";
 import { useCrewStore } from "../store/useCrewStore";
 import type { ImportDraftItem } from "../types";
 import { toDateInput } from "../utils/date";
@@ -23,26 +24,58 @@ export function ImportScreen() {
   const [projectId, setProjectId] = useState("");
   const [rawText, setRawText] = useState(example);
   const [items, setItems] = useState<ImportDraftItem[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
 
   function patchItem(index: number, input: Partial<ImportDraftItem>) {
     setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...input } : item));
   }
 
+  function parseText() {
+    setImportError(null);
+    setItems(parseImportText(rawText));
+  }
+
   async function submit() {
-    await confirmImport(projectId, rawText, items);
-    setItems([]);
-    setRawText("");
+    setImportError(null);
+
+    if (!projectId) {
+      setImportError("Выберите проект для импорта");
+      return;
+    }
+
+    if (!Array.isArray(items)) {
+      setImportError("Не удалось создать публикации: проверьте данные импорта");
+      return;
+    }
+
+    try {
+      await confirmImport(projectId, rawText, items);
+      setItems([]);
+      setRawText("");
+    } catch (error) {
+      const apiError = error as ApiError;
+      if (apiError.code === "VALIDATION_ERROR") {
+        console.error("Import validation details", apiError.details);
+        setImportError("Не удалось создать публикации: проверьте выбранный проект и данные импорта");
+        return;
+      }
+
+      setImportError(error instanceof Error ? error.message : "Не удалось создать публикации");
+    }
   }
 
   return (
     <div className="space-y-3">
       <Card className="space-y-3">
-        <select className={selectClass} value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+        <select className={selectClass} value={projectId} onChange={(event) => {
+          setProjectId(event.target.value);
+          setImportError(null);
+        }}>
           <option value="">Выберите проект</option>
           {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
         </select>
         <Textarea rows={9} placeholder="Вставьте контент-план" value={rawText} onChange={(event) => setRawText(event.target.value)} />
-        <Button className="w-full" disabled={!rawText.trim()} onClick={() => setItems(parseImportText(rawText))}>Разобрать</Button>
+        <Button className="w-full" disabled={!rawText.trim()} onClick={parseText}>Разобрать</Button>
       </Card>
 
       {items.length ? (
@@ -59,9 +92,10 @@ export function ImportScreen() {
               <Input placeholder="Reference URL" value={item.referenceUrl ?? ""} onChange={(event) => patchItem(index, { referenceUrl: event.target.value })} />
             </Card>
           ))}
-          <Button className="w-full" disabled={!projectId || isLoading} onClick={() => void submit()}>
+          <Button className="w-full" disabled={isLoading} onClick={() => void submit()}>
             Создать публикации и задачи
           </Button>
+          {importError ? <p className="text-sm text-red-300">{importError}</p> : null}
         </div>
       ) : <EmptyState title="Preview появится после разбора">Проверьте строки перед созданием задач.</EmptyState>}
     </div>

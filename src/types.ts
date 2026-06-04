@@ -75,7 +75,7 @@ export type ImportDraftItem = {
 
 export type ImportDraftTask = {
   contentItemIndex: number;
-  projectId: string;
+  projectId?: string;
   title: string;
   description?: string | null;
   assigneeId?: string | null;

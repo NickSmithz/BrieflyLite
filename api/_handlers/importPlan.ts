@@ -3,9 +3,8 @@ import { prisma } from "../_lib/prisma.js";
 import { normalizeDate, readBody, sendJson, type ApiRequest, type ApiResponse, type AuthContext } from "../_lib/http.js";
 
 const itemSchema = z.object({
-  projectId: z.string().min(1),
   title: z.string().min(1),
-  format: z.string().min(1),
+  format: z.string().optional(),
   publishDate: z.string().nullable().optional(),
   topic: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
@@ -14,8 +13,8 @@ const itemSchema = z.object({
 });
 
 const taskSchema = z.object({
-  projectId: z.string().min(1),
   contentItemIndex: z.number().int().nonnegative().optional(),
+  contentItemClientIndex: z.number().int().nonnegative().optional(),
   title: z.string().min(1),
   description: z.string().nullable().optional(),
   assigneeId: z.string().nullable().optional(),
@@ -24,15 +23,40 @@ const taskSchema = z.object({
   priority: z.string().optional(),
 });
 
+const confirmImportSchema = z.object({
+  projectId: z.string().min(1),
+  rawText: z.string().optional(),
+  items: z.array(itemSchema),
+  tasks: z.array(taskSchema).default([]),
+});
+
 export async function confirmImport(req: ApiRequest, res: ApiResponse, auth: AuthContext) {
-  const body = z
-    .object({
-      projectId: z.string().min(1),
-      rawText: z.string().optional(),
-      items: z.array(itemSchema),
-      tasks: z.array(taskSchema).default([]),
-    })
-    .parse(await readBody(req));
+  const bodyResult = confirmImportSchema.safeParse(await readBody(req));
+
+  if (!bodyResult.success) {
+    sendJson(res, 400, {
+      error: "Invalid import payload",
+      code: "VALIDATION_ERROR",
+      details: bodyResult.error.errors,
+    });
+    return;
+  }
+
+  const body = bodyResult.data;
+  const project = await prisma.project.findFirst({
+    where: {
+      id: body.projectId,
+      teamId: auth.teamId,
+    },
+  });
+
+  if (!project) {
+    sendJson(res, 404, {
+      error: "Project not found",
+      code: "PROJECT_NOT_FOUND",
+    });
+    return;
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     const contentItems = [];
@@ -40,10 +64,15 @@ export async function confirmImport(req: ApiRequest, res: ApiResponse, auth: Aut
       contentItems.push(
         await tx.contentItem.create({
           data: {
-            ...item,
-            projectId: body.projectId,
             teamId: auth.teamId,
+            projectId: body.projectId,
+            title: item.title,
+            format: item.format || "post",
             publishDate: normalizeDate(item.publishDate),
+            topic: item.topic || null,
+            notes: item.notes || null,
+            referenceUrl: item.referenceUrl || null,
+            status: item.status || "idea",
           },
         }),
       );
@@ -51,20 +80,20 @@ export async function confirmImport(req: ApiRequest, res: ApiResponse, auth: Aut
 
     const tasks = [];
     for (const task of body.tasks) {
-      const contentItemId =
-        task.contentItemIndex === undefined ? null : contentItems[task.contentItemIndex]?.id ?? null;
+      const contentItemIndex = task.contentItemClientIndex ?? task.contentItemIndex;
+      const contentItemId = contentItemIndex === undefined ? null : contentItems[contentItemIndex]?.id ?? null;
       tasks.push(
         await tx.task.create({
           data: {
-            projectId: body.projectId,
             teamId: auth.teamId,
+            projectId: body.projectId,
             contentItemId,
             title: task.title,
-            description: task.description,
-            assigneeId: task.assigneeId,
+            description: task.description || null,
+            assigneeId: task.assigneeId || null,
             dueDate: normalizeDate(task.dueDate),
-            status: task.status ?? "new",
-            priority: task.priority ?? "normal",
+            status: task.status || "new",
+            priority: task.priority || "normal",
           },
         }),
       );
