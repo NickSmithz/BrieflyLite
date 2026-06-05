@@ -15,6 +15,7 @@ import { parseImportText as parseText } from "../utils/importParser";
 import { generateTasksForImport } from "../utils/taskGenerator";
 
 type ImportStep = "text" | "items" | "tasks";
+type TaskProjectFilter = string | "all";
 
 type CrewState = {
   token: string | null;
@@ -26,6 +27,7 @@ type CrewState = {
   tasks: Task[];
   activeTab: Tab;
   selectedProjectId: string | null;
+  selectedTaskProjectId: TaskProjectFilter;
   isLoading: boolean;
   error: string | null;
   successMessage: string | null;
@@ -59,6 +61,7 @@ type CrewState = {
   goToImportStep: (step: ImportStep) => void;
   confirmImport: () => Promise<void>;
   resetImport: () => void;
+  setSelectedTaskProject: (projectId: TaskProjectFilter) => void;
   setActiveTab: (tab: Tab) => void;
   setSelectedProject: (projectId: string | null) => void;
   clearMessages: () => void;
@@ -107,6 +110,7 @@ export const useCrewStore = create<CrewState>((set, get) => ({
   tasks: [],
   activeTab: "home",
   selectedProjectId: null,
+  selectedTaskProjectId: "all",
   isLoading: false,
   error: null,
   successMessage: null,
@@ -144,6 +148,7 @@ export const useCrewStore = create<CrewState>((set, get) => ({
       tasks: [],
       activeTab: "home",
       selectedProjectId: null,
+      selectedTaskProjectId: "all",
       ...emptyImportState,
     });
   },
@@ -350,6 +355,10 @@ export const useCrewStore = create<CrewState>((set, get) => ({
 
   resetImport() {
     set({ ...emptyImportState, error: null, successMessage: null });
+  },
+
+  setSelectedTaskProject(projectId) {
+    set({ selectedTaskProjectId: projectId });
   },
 
   setActiveTab(tab) {

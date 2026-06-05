@@ -33,7 +33,18 @@ const statuses = [
 const selectClass = "min-h-11 w-full rounded-lg border border-white/10 bg-crew-card px-3 text-white outline-none";
 
 export function TasksScreen() {
-  const { currentMember, projects, members, tasks, contentItems, createTask, updateTask, updateTaskStatus, deleteTask } = useCrewStore();
+  const {
+    currentMember,
+    projects,
+    members,
+    tasks,
+    contentItems,
+    selectedTaskProjectId,
+    createTask,
+    updateTaskStatus,
+    deleteTask,
+    setSelectedTaskProject,
+  } = useCrewStore();
   const [filter, setFilter] = useState<Filter>("mine");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -45,14 +56,35 @@ export function TasksScreen() {
     status: "new",
   });
 
-  const visibleTasks = useMemo(() => tasks.filter((task) => {
-    if (filter === "mine") return task.assigneeId === currentMember?.id && task.status !== "done";
-    if (filter === "today") return isToday(task.dueDate);
-    if (filter === "week") return isThisWeek(task.dueDate);
-    if (filter === "overdue") return isOverdue(task.dueDate, task.status);
-    if (filter === "done") return task.status === "done";
-    return true;
-  }), [tasks, filter, currentMember?.id]);
+  const activeProjects = useMemo(() => projects.filter((project) => !project.archived), [projects]);
+  const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
+  const selectedProjectExists =
+    selectedTaskProjectId === "all" || activeProjects.some((project) => project.id === selectedTaskProjectId);
+  const effectiveTaskProjectId = selectedProjectExists ? selectedTaskProjectId : "all";
+
+  const visibleTasks = useMemo(() => {
+    let filteredTasks = tasks;
+
+    if (effectiveTaskProjectId !== "all") {
+      filteredTasks = filteredTasks.filter((task) => task.projectId === effectiveTaskProjectId);
+    }
+
+    return filteredTasks.filter((task) => {
+      if (filter === "mine") return task.assigneeId === currentMember?.id && task.status !== "done";
+      if (filter === "today") return isToday(task.dueDate);
+      if (filter === "week") return isThisWeek(task.dueDate);
+      if (filter === "overdue") return isOverdue(task.dueDate, task.status);
+      if (filter === "done") return task.status === "done";
+      return true;
+    });
+  }, [tasks, effectiveTaskProjectId, filter, currentMember?.id]);
+
+  const emptyTitle = useMemo(() => {
+    if (effectiveTaskProjectId !== "all" && filter !== "all") return "Нет задач по выбранному проекту и фильтру";
+    if (filter === "mine") return "У вас нет задач по выбранному фильтру";
+    if (effectiveTaskProjectId !== "all") return "В этом проекте пока нет задач";
+    return "Задач пока нет";
+  }, [effectiveTaskProjectId, filter]);
 
   async function submit() {
     await createTask({ ...form, assigneeId: form.assigneeId || null, dueDate: form.dueDate || null });
@@ -63,6 +95,23 @@ export function TasksScreen() {
   return (
     <div className="space-y-3">
       <Button className="w-full" onClick={() => setOpen(true)}><Plus size={18} /> Добавить задачу</Button>
+      <div className="-mx-3 overflow-x-auto px-3">
+        <div className="flex min-w-max gap-2">
+          <ProjectChip
+            active={effectiveTaskProjectId === "all"}
+            label="Все проекты"
+            onClick={() => setSelectedTaskProject("all")}
+          />
+          {activeProjects.map((project) => (
+            <ProjectChip
+              key={project.id}
+              active={effectiveTaskProjectId === project.id}
+              label={project.name}
+              onClick={() => setSelectedTaskProject(project.id)}
+            />
+          ))}
+        </div>
+      </div>
       <div className="-mx-3 overflow-x-auto px-3">
         <div className="flex min-w-max gap-2">
           {filters.map(([value, label]) => (
@@ -78,7 +127,7 @@ export function TasksScreen() {
       </div>
 
       {visibleTasks.length ? visibleTasks.map((task) => {
-        const project = projects.find((item) => item.id === task.projectId);
+        const project = projectById.get(task.projectId);
         const assignee = members.find((member) => member.id === task.assigneeId);
         const contentItem = contentItems.find((item) => item.id === task.contentItemId);
         const overdue = isOverdue(task.dueDate, task.status);
@@ -87,7 +136,7 @@ export function TasksScreen() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-bold">{task.title}</h2>
-                <p className="text-sm text-crew-muted">{project?.name || "Проект"} · {assignee ? `${assignee.avatarEmoji ?? ""} ${assignee.name}` : "Без ответственного"}</p>
+                <p className="text-sm text-crew-muted">{project?.name || "Проект не найден"} · {assignee ? `${assignee.avatarEmoji ?? ""} ${assignee.name}` : "Без ответственного"}</p>
               </div>
               <Badge tone={task.status === "done" ? "success" : overdue ? "danger" : task.status === "review" ? "warning" : "default"}>
                 {statuses.find(([value]) => value === task.status)?.[1] ?? task.status}
@@ -108,7 +157,7 @@ export function TasksScreen() {
             </div>
           </Card>
         );
-      }) : <EmptyState title="Задач нет">Создайте задачу вручную или импортируйте контент-план.</EmptyState>}
+      }) : <EmptyState title={emptyTitle}>Создайте задачу вручную или импортируйте контент-план.</EmptyState>}
 
       <Modal title="Новая задача" open={open} onClose={() => setOpen(false)}>
         <div className="space-y-3">
@@ -132,5 +181,19 @@ export function TasksScreen() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+function ProjectChip({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      className={`max-w-[180px] truncate rounded-full px-4 py-2 text-sm font-semibold ${
+        active ? "bg-crew-accent text-white" : "bg-white/10 text-crew-muted"
+      }`}
+      onClick={onClick}
+      title={label}
+    >
+      {label}
+    </button>
   );
 }
